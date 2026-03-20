@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhisperMeet Web - AI Meeting Intelligence</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      min-height: 100vh;
+      padding: 16px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .header h1 {
+      color: #58a6ff;
+      font-size: 28px;
+      margin-bottom: 4px;
+    }
+
+    .header .subtitle {
+      color: #8b949e;
+      font-size: 14px;
+    }
+
+    .status-bar {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 20px;
+      padding: 12px 20px;
+      background: #161b22;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      border: 1px solid #30363d;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #6e7681;
+    }
+
+    .status-dot.ready { background: #3fb950; }
+    .status-dot.recording { background: #f85149; animation: pulse 1s infinite; }
+    .status-dot.loading { background: #d29922; animation: pulse 0.5s infinite; }
+    .status-dot.error { background: #f85149; }
+    .status-dot.processing { background: #a371f7; animation: pulse 0.8s infinite; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .status-text {
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .controls {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    button {
+      padding: 10px 24px;
+      font-size: 14px;
+      font-weight: 600;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-start {
+      background: #238636;
+      color: #fff;
+    }
+    .btn-start:hover:not(:disabled) { background: #2ea043; }
+    .btn-start:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
+
+    .btn-stop {
+      background: #da3633;
+      color: #fff;
+    }
+    .btn-stop:hover:not(:disabled) { background: #f85149; }
+    .btn-stop:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
+
+    .btn-export {
+      background: #1f6feb;
+      color: #fff;
+    }
+    .btn-export:hover:not(:disabled) { background: #388bfd; }
+    .btn-export:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
+
+    .btn-clear {
+      background: #30363d;
+      color: #c9d1d9;
+    }
+    .btn-clear:hover { background: #484f58; }
+
+    .instructions {
+      background: #161b22;
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      border: 1px solid #30363d;
+      font-size: 13px;
+      color: #8b949e;
+    }
+
+    .instructions h3 {
+      color: #58a6ff;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .instructions ol {
+      margin-left: 20px;
+    }
+
+    .instructions li {
+      margin-bottom: 6px;
+    }
+
+    .error-message {
+      background: #f8514920;
+      border: 1px solid #f85149;
+      color: #f85149;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      font-size: 13px;
+      display: none;
+    }
+
+    .error-message.visible { display: block; }
+
+    .audio-visualizer {
+      height: 50px;
+      background: #161b22;
+      border-radius: 6px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      border: 1px solid #30363d;
+    }
+
+    .audio-bar {
+      width: 4px;
+      background: #58a6ff;
+      border-radius: 2px;
+      transition: height 0.1s;
+    }
+
+    /* Dashboard Grid */
+    .dashboard {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    @media (max-width: 900px) {
+      .dashboard { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: #161b22;
+      border-radius: 8px;
+      border: 1px solid #30363d;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: #21262d;
+      border-bottom: 1px solid #30363d;
+    }
+
+    .panel-header h3 {
+      color: #58a6ff;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .panel-badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: #30363d;
+      color: #8b949e;
+    }
+
+    .panel-badge.live {
+      background: #238636;
+      color: #fff;
+    }
+
+    .panel-badge.updated {
+      background: #a371f7;
+      color: #fff;
+    }
+
+    .panel-content {
+      padding: 12px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .panel-empty {
+      color: #6e7681;
+      text-align: center;
+      padding: 30px;
+    }
+
+    .entry {
+      padding: 10px;
+      margin-bottom: 8px;
+      background: #0d1117;
+      border-radius: 6px;
+      border-left: 3px solid #58a6ff;
+    }
+
+    .entry.transcript { border-left-color: #58a6ff; }
+    .entry.summary { border-left-color: #3fb950; }
+    .entry.challenge { border-left-color: #d29922; }
+    .entry.debate { border-left-color: #f85149; }
+
+    .entry-time {
+      color: #6e7681;
+      font-size: 11px;
+      margin-bottom: 4px;
+    }
+
+    .entry-content {
+      color: #e6edf3;
+    }
+
+    .entry-content ul {
+      margin-left: 16px;
+      margin-top: 6px;
+    }
+
+    .entry-content li {
+      margin-bottom: 4px;
+    }
+
+    /* Scrollbar styling */
+    .panel-content::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .panel-content::-webkit-scrollbar-track {
+      background: #0d1117;
+    }
+
+    .panel-content::-webkit-scrollbar-thumb {
+      background: #30363d;
+      border-radius: 4px;
+    }
+
+    .panel-content::-webkit-scrollbar-thumb:hover {
+      background: #484f58;
+    }
+
+    /* Model status */
+    .model-status {
+      display: flex;
+      gap: 16px;
+      font-size: 12px;
+      color: #8b949e;
+    }
+
+    .model-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .model-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #6e7681;
+    }
+
+    .model-dot.loaded { background: #3fb950; }
+    .model-dot.loading { background: #d29922; }
+    .model-dot.error { background: #f85149; }
+
+    /* Loading overlay */
+    .loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(13, 17, 23, 0.9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .loading-overlay.hidden { display: none; }
+
+    .loading-content {
+      text-align: center;
+    }
+
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 3px solid #30363d;
+      border-top-color: #58a6ff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+      color: #8b949e;
+      font-size: 14px;
+    }
+
+    .loading-progress {
+      color: #58a6ff;
+      font-size: 24px;
+      font-weight: 600;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>WhisperMeet Web</h1>
+    <p class="subtitle">AI-Powered Meeting Intelligence - Fully Local</p>
+  </div>
+
+  <div class="status-bar">
+    <div class="status-indicator">
+      <div class="status-dot" id="statusDot"></div>
+      <span class="status-text" id="statusText">Initializing...</span>
+    </div>
+    <div class="model-status">
+      <div class="model-item">
+        <div class="model-dot" id="whisperDot"></div>
+        <span>Whisper</span>
+      </div>
+      <div class="model-item">
+        <div class="model-dot" id="llmDot"></div>
+        <span>LLM</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn-start" id="startBtn" disabled>Start Recording</button>
+    <button class="btn-stop" id="stopBtn" disabled>Stop Recording</button>
+    <button class="btn-export" id="exportBtn" disabled>Export Markdown</button>
+    <button class="btn-clear" id="clearBtn">Clear All</button>
+  </div>
+
+  <div class="error-message" id="errorMessage"></div>
+
+  <div class="instructions">
+    <h3>How to Use:</h3>
+    <ol>
+      <li>Wait for both models to load (status shows "Ready")</li>
+      <li>Click "Start Recording" and select a browser tab with Teams/Zoom</li>
+      <li><strong>Enable "Share tab audio"</strong> in the dialog</li>
+      <li>Allow microphone access when prompted</li>
+      <li>Both meeting audio and microphone will be captured</li>
+      <li>Analysis panels will update automatically</li>
+      <li>Click "Export Markdown" to download your meeting notes</li>
+    </ol>
+  </div>
+
+  <div class="audio-visualizer" id="visualizer"></div>
+
+  <div class="dashboard">
+    <!-- Transcript Panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <h3>Live Transcript</h3>
+        <span class="panel-badge live" id="transcriptBadge">LIVE</span>
+      </div>
+      <div class="panel-content" id="transcriptContent">
+        <div class="panel-empty">Transcript will appear here...</div>
+      </div>
+    </div>
+
+    <!-- Summary Panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <h3>Summary</h3>
+        <span class="panel-badge" id="summaryBadge">Topics, Decisions, Actions</span>
+      </div>
+      <div class="panel-content" id="summaryContent">
+        <div class="panel-empty">Summary will appear every 60 seconds...</div>
+      </div>
+    </div>
+
+    <!-- Challenge Panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <h3>Challenge</h3>
+        <span class="panel-badge" id="challengeBadge">Weak Reasoning, Missing Risks</span>
+      </div>
+      <div class="panel-content" id="challengeContent">
+        <div class="panel-empty">Critical analysis will appear every 90 seconds...</div>
+      </div>
+    </div>
+
+    <!-- Debate Panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <h3>Debate</h3>
+        <span class="panel-badge" id="debateBadge">Contradictions, Unresolved Topics</span>
+      </div>
+      <div class="panel-content" id="debateContent">
+        <div class="panel-empty">Contradiction detection will run continuously...</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-content">
+      <div class="spinner"></div>
+      <div class="loading-text" id="loadingText">Loading Whisper model...</div>
+      <div class="loading-progress" id="loadingProgress">0%</div>
+    </div>
+  </div>
+
+  <script type="module">
+    // ==================== IMPORTS ====================
+    import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+
+    // Configure Transformers.js to use IndexedDB cache
+    env.allowLocalModels = true;
+    env.useBrowserCache = true;
+
+    // ==================== STATE ====================
+    let whisperPipeline = null;
+    let llmPipeline = null;
+    let audioContext = null;
+    let isRecording = false;
+    let recordingStartTime = null;
+
+    // Audio buffers
+    let audioBuffer = [];
+    let transcriptHistory = [];
+
+    // Analysis state
+    let summaryInterval = null;
+    let challengeInterval = null;
+    let debateInterval = null;
+    let lastSummaryTime = 0;
+    let lastChallengeTime = 0;
+
+    // Current analysis results
+    let currentSummary = null;
+    let currentChallenge = null;
+    let currentDebate = null;
+
+    // IndexedDB
+    let db = null;
+
+    // ==================== DOM ELEMENTS ====================
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    const whisperDot = document.getElementById('whisperDot');
+    const llmDot = document.getElementById('llmDot');
+    const errorMessage = document.getElementById('errorMessage');
+    const transcriptContent = document.getElementById('transcriptContent');
+    const summaryContent = document.getElementById('summaryContent');
+    const challengeContent = document.getElementById('challengeContent');
+    const debateContent = document.getElementById('debateContent');
+    const visualizer = document.getElementById('visualizer');
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    const loadingText = document.getElementById('loadingText');
+    const loadingProgress = document.getElementById('loadingProgress');
+    const transcriptBadge = document.getElementById('transcriptBadge');
+    const summaryBadge = document.getElementById('summaryBadge');
+    const challengeBadge = document.getElementById('challengeBadge');
+    const debateBadge = document.getElementById('debateBadge');
+
+    // Create visualizer bars
+    for (let i = 0; i < 30; i++) {
+      const bar = document.createElement('div');
+      bar.className = 'audio-bar';
+      bar.style.height = '8px';
+      visualizer.appendChild(bar);
+    }
+
+    // ==================== INDEXEDDB ====================
+    async function initDB() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open('WhisperMeetDB', 1);
+
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          db = request.result;
+          resolve(db);
+        };
+
+        request.onupgradeneeded = (event) => {
+          const database = event.target.result;
+
+          if (!database.objectStoreNames.contains('transcripts')) {
+            database.createObjectStore('transcripts', { keyPath: 'id', autoIncrement: true });
+          }
+          if (!database.objectStoreNames.contains('summaries')) {
+            database.createObjectStore('summaries', { keyPath: 'id', autoIncrement: true });
+          }
+          if (!database.objectStoreNames.contains('analyses')) {
+            database.createObjectStore('analyses', { keyPath: 'id', autoIncrement: true });
+          }
+        };
+      });
+    }
+
+    async function saveTranscript(text, timestamp) {
+      if (!db) return;
+      const tx = db.transaction('transcripts', 'readwrite');
+      const store = tx.objectStore('transcripts');
+      store.add({ text, timestamp, meetingId: recordingStartTime });
+    }
+
+    async function saveAnalysis(type, content, timestamp) {
+      if (!db) return;
+      const tx = db.transaction('analyses', 'readwrite');
+      const store = tx.objectStore('analyses');
+      store.add({ type, content, timestamp, meetingId: recordingStartTime });
+    }
+
+    // ==================== STATUS ====================
+    function setStatus(state, text = '') {
+      statusDot.className = 'status-dot ' + state;
+      const statusTexts = {
+        'init': 'Initializing...',
+        'loading': 'Loading models...',
+        'ready': 'Ready to record',
+        'recording': 'Recording...',
+        'processing': 'Processing...',
+        'error': 'Error'
+      };
+      statusText.textContent = text || statusTexts[state] || state;
+    }
+
+    function setModelStatus(type, state) {
+      const dot = type === 'whisper' ? whisperDot : llmDot;
+      dot.className = 'model-dot ' + state;
+    }
+
+    function showError(message) {
+      errorMessage.textContent = message;
+      errorMessage.classList.add('visible');
+      setStatus('error', message);
+    }
+
+    function hideError() {
+      errorMessage.classList.remove('visible');
+    }
+
+    // ==================== UI HELPERS ====================
+    function addEntry(panel, type, content, timestamp) {
+      const empty = panel.querySelector('.panel-empty');
+      if (empty) empty.remove();
+
+      const entry = document.createElement('div');
+      entry.className = 'entry ' + type;
+
+      const time = new Date(timestamp).toLocaleTimeString();
+      entry.innerHTML = `
+        <div class="entry-time">${time}</div>
+        <div class="entry-content">${formatContent(content)}</div>
+      `;
+
+      panel.appendChild(entry);
+      panel.scrollTop = panel.scrollHeight;
+    }
+
+    function formatContent(content) {
+      if (typeof content !== 'string') {
+        return JSON.stringify(content, null, 2);
+      }
+      // Convert markdown-style formatting to HTML
+      return content
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\n/g, '<br>');
+    }
+
+    function updateBadge(badge, text, isLive = false) {
+      badge.textContent = text;
+      badge.className = 'panel-badge' + (isLive ? ' live' : '');
+    }
+
+    // ==================== MODEL LOADING ====================
+    async function loadWhisper() {
+      setModelStatus('whisper', 'loading');
+      loadingText.textContent = 'Loading Whisper model...';
+      loadingProgress.textContent = '0%';
+
+      try {
+        whisperPipeline = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny', {
+          quantized: true,
+          progress_callback: (progress) => {
+            if (progress.status === 'loading') {
+              loadingProgress.textContent = Math.round(progress.progress * 100) + '%';
+            }
+          }
+        });
+
+        // Warm up
+        await whisperPipeline(new Float32Array(16000), {
+          chunk_length_s: 1,
+          return_timestamps: false
+        });
+
+        setModelStatus('whisper', 'loaded');
+      } catch (error) {
+        setModelStatus('whisper', 'error');
+        throw error;
+      }
+    }
+
+    async function loadLLM() {
+      setModelStatus('llm', 'loading');
+      loadingText.textContent = 'Loading LLM model...';
+      loadingProgress.textContent = '0%';
+
+      try {
+        // Try loading a small instruct model
+        llmPipeline = await pipeline('text-generation', 'Xenova/phi-3.5-mini-instruct', {
+          quantized: true,
+          progress_callback: (progress) => {
+            if (progress.status === 'loading') {
+              loadingProgress.textContent = Math.round(progress.progress * 100) + '%';
+            }
+          }
+        });
+
+        // Warm up
+        await llmPipeline('Hello', { max_new_tokens: 5 });
+
+        setModelStatus('llm', 'loaded');
+      } catch (error) {
+        console.warn('Failed to load phi-3.5, trying llama-3.2-1b:', error);
+        try {
+          llmPipeline = await pipeline('text-generation', 'Xenova/llama-3.2-1b-instruct', {
+            quantized: true,
+            progress_callback: (progress) => {
+              if (progress.status === 'loading') {
+                loadingProgress.textContent = Math.round(progress.progress * 100) + '%';
+              }
+            }
+          });
+
+          await llmPipeline('Hello', { max_new_tokens: 5 });
+          setModelStatus('llm', 'loaded');
+        } catch (error2) {
+          setModelStatus('llm', 'error');
+          console.error('LLM loading failed:', error2);
+        }
+      }
+    }
+
+    async function initModels() {
+      setStatus('loading');
+
+      try {
+        await initDB();
+        await loadWhisper();
+
+        // Load LLM in background after Whisper
+        loadLLM().catch(err => console.warn('LLM optional:', err));
+
+        loadingOverlay.classList.add('hidden');
+        setStatus('ready');
+        startBtn.disabled = false;
+        exportBtn.disabled = false;
+      } catch (error) {
+        loadingOverlay.classList.add('hidden');
+        showError('Failed to load models: ' + error.message);
+      }
+    }
+
+    // ==================== AUDIO PROCESSING ====================
+    function captureTabAudio() {
+      return navigator.mediaDevices.getDisplayMedia({
+        video: { width: 1, height: 1 },
+        audio: true
+      });
+    }
+
+    function captureMicrophone() {
+      return navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+          sampleRate: 16000
+        }
+      });
+    }
+
+    function mergeStreams(tabStream, micStream) {
+      audioContext = new AudioContext({ sampleRate: 16000 });
+
+      const tabSource = audioContext.createMediaStreamSource(tabStream);
+      const micSource = audioContext.createMediaStreamSource(micStream);
+
+      const tabGain = audioContext.createGain();
+      const micGain = audioContext.createGain();
+      tabGain.gain.value = 1.0;
+      micGain.gain.value = 1.0;
+
+      const destination = audioContext.createMediaStreamDestination();
+
+      tabSource.connect(tabGain).connect(destination);
+      micSource.connect(micGain).connect(destination);
+
+      return { ctx: audioContext, stream: destination.stream, tabGain, micGain };
+    }
+
+    // Energy-based VAD
+    function calculateRMS(audioData) {
+      let sum = 0;
+      for (let i = 0; i < audioData.length; i++) {
+        sum += audioData[i] * audioData[i];
+      }
+      return Math.sqrt(sum / audioData.length);
+    }
+
+    const VAD_THRESHOLD = 0.02;
+    const CHUNK_DURATION = 8; // seconds
+
+    class AudioChunker {
+      constructor(context, stream) {
+        this.context = context;
+        this.stream = stream;
+        this.buffer = [];
+        this.chunkSize = 16000 * CHUNK_DURATION;
+        this.isProcessing = false;
+        this.silenceCount = 0;
+        this.minSpeechSamples = 16000 * 2; // At least 2 seconds of speech
+      }
+
+      start() {
+        const source = this.context.createMediaStreamSource(this.stream);
+        const processor = this.context.createScriptProcessor(4096, 1, 1);
+
+        source.connect(processor);
+        processor.connect(this.context.destination);
+
+        processor.onaudioprocess = (e) => {
+          const inputData = e.inputBuffer.getChannelData(0);
+          const rms = calculateRMS(inputData);
+
+          if (rms > VAD_THRESHOLD) {
+            // Voice detected
+            this.silenceCount = 0;
+            this.buffer.push(new Float32Array(inputData));
+          } else {
+            // Silence
+            this.silenceCount++;
+            // Still buffer a bit of silence for better transcription
+            if (this.buffer.length > 0 && this.silenceCount < 10) {
+              this.buffer.push(new Float32Array(inputData));
+            }
+          }
+
+          const totalSamples = this.buffer.reduce((acc, arr) => acc + arr.length, 0);
+          if (totalSamples >= this.chunkSize) {
+            this.processChunk();
+          }
+        };
+
+        this.processor = processor;
+      }
+
+      async processChunk() {
+        if (this.isProcessing) return;
+        this.isProcessing = true;
+
+        let combined = new Float32Array(0);
+        while (combined.length < this.chunkSize && this.buffer.length > 0) {
+          const chunk = this.buffer.shift();
+          const newCombined = new Float32Array(combined.length + chunk.length);
+          newCombined.set(combined);
+          newCombined.set(chunk, combined.length);
+          combined = newCombined;
+        }
+
+        if (combined.length > 0) {
+          const trimmed = combined.slice(0, this.chunkSize);
+          const rms = calculateRMS(trimmed);
+
+          // Only process if there's enough speech
+          if (rms > VAD_THRESHOLD) {
+            await transcribeAudio(trimmed);
+          }
+        }
+
+        this.isProcessing = false;
+      }
+
+      stop() {
+        if (this.processor) {
+          this.processor.disconnect();
+          this.processor = null;
+        }
+      }
+    }
+
+    // ==================== TRANSCRIPTION ====================
+    async function transcribeAudio(audioData) {
+      if (!whisperPipeline) return;
+
+      try {
+        const result = await whisperPipeline(audioData, {
+          chunk_length_s: CHUNK_DURATION,
+          return_timestamps: false
+        });
+
+        if (result && result.text && result.text.trim()) {
+          const timestamp = Date.now();
+          const text = result.text.trim();
+
+          // Add to transcript history
+          transcriptHistory.push({ text, timestamp });
+
+          // Display in UI
+          addEntry(transcriptContent, 'transcript', text, timestamp);
+
+          // Save to IndexedDB
+          await saveTranscript(text, timestamp);
+
+          // Trigger analysis
+          triggerAnalysis();
+        }
+      } catch (error) {
+        console.error('Transcription error:', error);
+      }
+    }
+
+    // ==================== LLM ANALYSIS ====================
+    const SUMMARY_SYSTEM = "You are an expert meeting analyst. Provide structured summaries in markdown format.";
+    const SUMMARY_PROMPT = (transcript) => `Analyze the following meeting transcript and provide a structured summary:
+
+Meeting Transcript:
+${transcript}
+
+Please provide:
+1. **Topics Discussed**: Main subjects covered
+2. **Key Points**: Most important takeaways
+3. **Decisions Made**: Any conclusions or decisions reached
+4. **Action Items**: Tasks or follow-ups mentioned
+5. **Risks**: Potential risks or concerns raised
+
+Format your response using clear headings and bullet points. Be concise.`;
+
+    const CHALLENGE_SYSTEM = "You are a critical thinking assistant. Analyze meeting content for potential issues and weaknesses.";
+    const CHALLENGE_PROMPT = (transcript) => `You are analyzing a meeting segment for critical thinking. Look for:
+
+1. **Hidden Assumptions**: What might be assumed but not stated?
+2. **Missing Risks**: What concerns or risks weren't mentioned?
+3. **Weak Arguments**: Where might reasoning be flawed?
+4. **Unanswered Questions**: What important questions remain?
+
+Meeting Transcript:
+${transcript}
+
+Provide your analysis in a clear, structured format with bullet points. Be concise - focus on the most important issues.`;
+
+    const DEBATE_SYSTEM = "You are a debate and contradiction detection expert. Analyze meeting transcripts for logical issues.";
+    const DEBATE_PROMPT = (transcript) => `Analyze the meeting transcript for contradictions and logical issues:
+
+1. **Contradictory Statements**: Find any statements that contradict each other
+2. **Unresolved Decisions**: Decisions that were mentioned but not concluded
+3. **Missing Constraints**: Important limitations or requirements not discussed
+
+Meeting Transcript:
+${transcript}
+
+Provide a detailed analysis of any issues found. Be concise.`;
+
+    async function generateSummary() {
+      if (!llmPipeline || transcriptHistory.length === 0) return;
+
+      const transcript = transcriptHistory.map(t => t.text).join(' ');
+      if (transcript.length < 50) return;
+
+      try {
+        setStatus('processing', 'Generating summary...');
+        updateBadge(summaryBadge, 'Generating...');
+
+        const output = await llmPipeline(SUMMARY_PROMPT(transcript), {
+          max_new_tokens: 512,
+          temperature: 0.5
+        });
+
+        const summary = typeof output === 'string' ? output : output[0]?.generated_text || '';
+        const summaryText = summary.replace(SUMMARY_PROMPT(transcript), '').trim();
+
+        currentSummary = { text: summaryText, timestamp: Date.now() };
+        addEntry(summaryContent, 'summary', summaryText, currentSummary.timestamp);
+        await saveAnalysis('summary', summaryText, currentSummary.timestamp);
+
+        updateBadge(summaryBadge, 'Updated');
+        setStatus('recording');
+      } catch (error) {
+        console.error('Summary error:', error);
+        setStatus('recording');
+      }
+    }
+
+    async function generateChallenge() {
+      if (!llmPipeline || transcriptHistory.length === 0) return;
+
+      const transcript = transcriptHistory.map(t => t.text).join(' ');
+      if (transcript.length < 50) return;
+
+      try {
+        setStatus('processing', 'Analyzing arguments...');
+        updateBadge(challengeBadge, 'Analyzing...');
+
+        const output = await llmPipeline(CHALLENGE_PROMPT(transcript), {
+          max_new_tokens: 384,
+          temperature: 0.7
+        });
+
+        const challenge = typeof output === 'string' ? output : output[0]?.generated_text || '';
+        const challengeText = challenge.replace(CHALLENGE_PROMPT(transcript), '').trim();
+
+        currentChallenge = { text: challengeText, timestamp: Date.now() };
+        addEntry(challengeContent, 'challenge', challengeText, currentChallenge.timestamp);
+        await saveAnalysis('challenge', challengeText, currentChallenge.timestamp);
+
+        updateBadge(challengeBadge, 'Updated');
+        setStatus('recording');
+      } catch (error) {
+        console.error('Challenge error:', error);
+        setStatus('recording');
+      }
+    }
+
+    async function generateDebate() {
+      if (!llmPipeline || transcriptHistory.length < 3) return;
+
+      const recentTranscripts = transcriptHistory.slice(-5);
+      const transcript = recentTranscripts.map(t => t.text).join(' ');
+
+      try {
+        updateBadge(debateBadge, 'Checking...');
+
+        const output = await llmPipeline(DEBATE_PROMPT(transcript), {
+          max_new_tokens: 384,
+          temperature: 0.6
+        });
+
+        const debate = typeof output === 'string' ? output : output[0]?.generated_text || '';
+        const debateText = debate.replace(DEBATE_PROMPT(transcript), '').trim();
+
+        // Only update if we found something meaningful
+        if (debateText.length > 20 && !debateText.toLowerCase().includes('no contradiction')) {
+          currentDebate = { text: debateText, timestamp: Date.now() };
+          addEntry(debateContent, 'debate', debateText, currentDebate.timestamp);
+          await saveAnalysis('debate', debateText, currentDebate.timestamp);
+        }
+
+        updateBadge(debateBadge, 'Monitoring');
+      } catch (error) {
+        console.error('Debate error:', error);
+      }
+    }
+
+    function triggerAnalysis() {
+      const now = Date.now();
+
+      // Summary every 60 seconds
+      if (now - lastSummaryTime > 60000) {
+        generateSummary();
+        lastSummaryTime = now;
+      }
+
+      // Challenge every 90 seconds
+      if (now - lastChallengeTime > 90000) {
+        generateChallenge();
+        lastChallengeTime = now;
+      }
+    }
+
+    function startAnalysisIntervals() {
+      lastSummaryTime = Date.now();
+      lastChallengeTime = Date.now();
+
+      // Summary every 60 seconds
+      summaryInterval = setInterval(() => {
+        if (isRecording) generateSummary();
+      }, 60000);
+
+      // Challenge every 90 seconds
+      challengeInterval = setInterval(() => {
+        if (isRecording) generateChallenge();
+      }, 90000);
+
+      // Debate every 30 seconds (continuous monitoring)
+      debateInterval = setInterval(() => {
+        if (isRecording) generateDebate();
+      }, 30000);
+    }
+
+    function stopAnalysisIntervals() {
+      if (summaryInterval) clearInterval(summaryInterval);
+      if (challengeInterval) clearInterval(challengeInterval);
+      if (debateInterval) clearInterval(debateInterval);
+    }
+
+    // ==================== VISUALIZER ====================
+    function updateVisualizer(levels) {
+      const bars = visualizer.querySelectorAll('.audio-bar');
+      bars.forEach((bar, i) => {
+        const level = levels[i % levels.length] || 0;
+        bar.style.height = Math.max(4, level * 40) + 'px';
+      });
+    }
+
+    // ==================== RECORDING ====================
+    startBtn.addEventListener('click', async () => {
+      hideError();
+
+      try {
+        setStatus('loading', 'Capturing tab audio...');
+        const tabStream = await captureTabAudio();
+
+        const audioTracks = tabStream.getAudioTracks();
+        if (audioTracks.length === 0) {
+          tabStream.getTracks().forEach(t => t.stop());
+          throw new Error("No audio track. Please enable 'Share tab audio' in the dialog.");
+        }
+
+        setStatus('loading', 'Capturing microphone...');
+        const micStream = await captureMicrophone();
+
+        setStatus('loading', 'Setting up audio...');
+        const { ctx, stream: mergedStream } = mergeStreams(tabStream, micStream);
+
+        // Clear previous data
+        transcriptHistory = [];
+        audioBuffer = [];
+        recordingStartTime = Date.now();
+
+        // Start chunker
+        const chunker = new AudioChunker(ctx, mergedStream);
+        chunker.start();
+
+        // Visualizer
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        const source = ctx.createMediaStreamSource(mergedStream);
+        source.connect(analyser);
+
+        function updateViz() {
+          if (!isRecording) return;
+          const dataArray = new Uint8Array(analyser.frequencyBinCount);
+          analyser.getByteFrequencyData(dataArray);
+          updateVisualizer(Array.from(dataArray).slice(0, 30).map(v => v / 255));
+          requestAnimationFrame(updateViz);
+        }
+
+        // Start analysis
+        startAnalysisIntervals();
+
+        // Update state
+        isRecording = true;
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        setStatus('recording');
+        updateBadge(transcriptBadge, 'LIVE', true);
+
+        window.currentStreams = { tabStream, micStream, ctx, chunker };
+
+      } catch (error) {
+        showError(error.message);
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+      }
+    });
+
+    stopBtn.addEventListener('click', () => {
+      isRecording = false;
+      stopAnalysisIntervals();
+
+      if (window.currentStreams) {
+        const { tabStream, micStream, ctx, chunker } = window.currentStreams;
+
+        if (chunker) chunker.stop();
+        if (ctx) ctx.close();
+
+        tabStream.getTracks().forEach(t => t.stop());
+        micStream.getTracks().forEach(t => t.stop());
+
+        window.currentStreams = null;
+      }
+
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      updateBadge(transcriptBadge, 'STOPPED');
+      setStatus('ready');
+
+      // Generate final summary
+      if (transcriptHistory.length > 0) {
+        generateSummary();
+        generateChallenge();
+      }
+    });
+
+    // ==================== EXPORT ====================
+    exportBtn.addEventListener('click', async () => {
+      if (transcriptHistory.length === 0) {
+        showError('No transcript data to export');
+        return;
+      }
+
+      const date = new Date();
+      const dateStr = date.toISOString().split('T')[0];
+      const timeStr = date.toTimeString().split(' ')[0].replace(/:/g, '-');
+
+      let markdown = `# Meeting Notes - ${dateStr}\n\n`;
+      markdown += `**Recorded:** ${date.toLocaleString()}\n\n`;
+      markdown += `---\n\n`;
+
+      // Transcript
+      markdown += `## Transcript\n\n`;
+      transcriptHistory.forEach(t => {
+        const time = new Date(t.timestamp).toLocaleTimeString();
+        markdown += `**${time}**\n${t.text}\n\n`;
+      });
+
+      // Summary
+      if (currentSummary) {
+        markdown += `---\n\n## Summary\n\n${currentSummary.text}\n\n`;
+      }
+
+      // Challenge
+      if (currentChallenge) {
+        markdown += `---\n\n## Critical Analysis\n\n${currentChallenge.text}\n\n`;
+      }
+
+      // Debate
+      if (currentDebate) {
+        markdown += `---\n\n## Contradictions & Issues\n\n${currentDebate.text}\n\n`;
+      }
+
+      // Download
+      const blob = new Blob([markdown], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `meeting-${dateStr}-${timeStr}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    // ==================== CLEAR ====================
+    clearBtn.addEventListener('click', () => {
+      transcriptHistory = [];
+      currentSummary = null;
+      currentChallenge = null;
+      currentDebate = null;
+
+      transcriptContent.innerHTML = '<div class="panel-empty">Transcript will appear here...</div>';
+      summaryContent.innerHTML = '<div class="panel-empty">Summary will appear every 60 seconds...</div>';
+      challengeContent.innerHTML = '<div class="panel-empty">Critical analysis will appear every 90 seconds...</div>';
+      debateContent.innerHTML = '<div class="panel-empty">Contradiction detection will run continuously...</div>';
+
+      updateBadge(summaryBadge, 'Topics, Decisions, Actions');
+      updateBadge(challengeBadge, 'Weak Reasoning, Missing Risks');
+      updateBadge(debateBadge, 'Contradictions, Unresolved Topics');
+    });
+
+    // ==================== INIT ====================
+    initModels();
+  </script>
+</body>
+</html>
