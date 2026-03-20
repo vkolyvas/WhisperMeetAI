@@ -406,6 +406,81 @@
 
   <div class="audio-visualizer" id="visualizer"></div>
 
+  <!-- Debug Panel -->
+  <div class="debug-panel" id="debugPanel" style="display: none;">
+    <div class="debug-header">
+      <span>Debug Log</span>
+      <button class="btn-clear" id="clearDebugBtn" style="padding: 2px 8px; font-size: 11px;">Clear</button>
+    </div>
+    <div class="debug-content" id="debugContent"></div>
+  </div>
+
+  <style>
+    .debug-panel {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      margin-bottom: 16px;
+      max-height: 150px;
+      overflow: hidden;
+    }
+    .debug-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      background: #21262d;
+      border-bottom: 1px solid #30363d;
+      font-size: 12px;
+      color: #8b949e;
+    }
+    .debug-content {
+      padding: 8px;
+      font-family: monospace;
+      font-size: 11px;
+      color: #7ee787;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+    .debug-entry {
+      margin-bottom: 4px;
+    }
+  </style>
+
+  <script>
+    // Debug logging
+    const debugContent = document.getElementById('debugContent');
+    const debugPanel = document.getElementById('debugPanel');
+
+    function addDebugLog(message) {
+      if (!debugContent) return;
+      const entry = document.createElement('div');
+      entry.className = 'debug-entry';
+      entry.textContent = '[' + new Date().toLocaleTimeString() + '] ' + message;
+      debugContent.appendChild(entry);
+      debugContent.scrollTop = debugContent.scrollHeight;
+    }
+
+    // Show debug panel by default during recording
+    function toggleDebugPanel(show) {
+      if (debugPanel) {
+        debugPanel.style.display = show ? 'block' : 'none';
+      }
+    }
+
+    // Clear debug
+    document.getElementById('clearDebugBtn')?.addEventListener('click', () => {
+      if (debugContent) debugContent.innerHTML = '';
+    });
+
+    // Override console.log to show in debug panel
+    const originalLog = console.log;
+    console.log = function(...args) {
+      originalLog.apply(console, args);
+      addDebugLog(args.join(' '));
+    };
+  </script>
+
   <div class="dashboard">
     <!-- Transcript Panel -->
     <div class="panel">
@@ -721,25 +796,37 @@
     // ==================== AUDIO PROCESSING ====================
     function captureTabAudio() {
       return navigator.mediaDevices.getDisplayMedia({
-        video: { width: 1, height: 1 },
-        audio: true
+        video: false,
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false
+        }
       });
     }
 
     function captureMicrophone() {
       return navigator.mediaDevices.getUserMedia({
         audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          channelCount: 1,
-          sampleRate: 16000
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          channelCount: 1
         }
       });
     }
 
+    // Simple audio merger - let browser handle sample rate
+    let currentSampleRate = 16000;
+
     function mergeStreams(tabStream, micStream) {
-      audioContext = new AudioContext({ sampleRate: 16000 });
+      // Get actual sample rate from the stream (usually 48kHz for tab audio)
+      const tabAudioTrack = tabStream.getAudioTracks()[0];
+      const settings = tabAudioTrack.getSettings();
+      currentSampleRate = settings.sampleRate || 48000;
+      console.log('Tab audio sample rate:', currentSampleRate);
+
+      audioContext = new AudioContext({ sampleRate: currentSampleRate });
 
       const tabSource = audioContext.createMediaStreamSource(tabStream);
       const micSource = audioContext.createMediaStreamSource(micStream);
@@ -757,8 +844,29 @@
       return { ctx: audioContext, stream: destination.stream, tabGain, micGain };
     }
 
-    // Energy-based VAD
+    // Resample audio to 16kHz for Whisper
+    function resampleAudio(audioData, fromRate, toRate = 16000) {
+      if (fromRate === toRate) return audioData;
+
+      const ratio = fromRate / toRate;
+      const newLength = Math.round(audioData.length / ratio);
+      const result = new Float32Array(newLength);
+
+      for (let i = 0; i < newLength; i++) {
+        const srcIndex = i * ratio;
+        const srcIndexFloor = Math.floor(srcIndex);
+        const srcIndexCeil = Math.min(Math.ceil(srcIndex), audioData.length - 1);
+        const frac = srcIndex - srcIndexFloor;
+
+        result[i] = audioData[srcIndexFloor] * (1 - frac) + audioData[srcIndexCeil] * frac;
+      }
+
+      return result;
+    }
+
+    // Energy-based VAD - much more lenient
     function calculateRMS(audioData) {
+      if (!audioData || audioData.length === 0) return 0;
       let sum = 0;
       for (let i = 0; i < audioData.length; i++) {
         sum += audioData[i] * audioData[i];
@@ -766,23 +874,24 @@
       return Math.sqrt(sum / audioData.length);
     }
 
-    const VAD_THRESHOLD = 0.02;
+    const VAD_THRESHOLD = 0.005; // Much lower threshold - let Whisper decide
     const CHUNK_DURATION = 8; // seconds
+    const CHUNK_SAMPLES = 16000 * CHUNK_DURATION; // 8 seconds at 16kHz
 
     class AudioChunker {
-      constructor(context, stream) {
+      constructor(context, stream, sampleRate) {
         this.context = context;
         this.stream = stream;
+        this.sampleRate = sampleRate || 16000;
         this.buffer = [];
-        this.chunkSize = 16000 * CHUNK_DURATION;
         this.isProcessing = false;
         this.silenceCount = 0;
-        this.minSpeechSamples = 16000 * 2; // At least 2 seconds of speech
+        console.log('AudioChunker sample rate:', this.sampleRate);
       }
 
       start() {
         const source = this.context.createMediaStreamSource(this.stream);
-        const processor = this.context.createScriptProcessor(4096, 1, 1);
+        const processor = this.context.createScriptProcessor(8192, 1, 1);
 
         source.connect(processor);
         processor.connect(this.context.destination);
@@ -791,21 +900,24 @@
           const inputData = e.inputBuffer.getChannelData(0);
           const rms = calculateRMS(inputData);
 
-          if (rms > VAD_THRESHOLD) {
-            // Voice detected
+          // Always buffer - let VAD be very lenient
+          if (rms > VAD_THRESHOLD || this.buffer.length === 0) {
             this.silenceCount = 0;
             this.buffer.push(new Float32Array(inputData));
-          } else {
-            // Silence
+          } else if (this.buffer.length > 0) {
+            // Buffer a bit of silence after speech for better detection
             this.silenceCount++;
-            // Still buffer a bit of silence for better transcription
-            if (this.buffer.length > 0 && this.silenceCount < 10) {
+            if (this.silenceCount < 5) {
               this.buffer.push(new Float32Array(inputData));
             }
           }
 
+          // Calculate total samples in original sample rate
           const totalSamples = this.buffer.reduce((acc, arr) => acc + arr.length, 0);
-          if (totalSamples >= this.chunkSize) {
+          // Convert to 16kHz equivalent for chunk size
+          const targetSamples = Math.round(totalSamples * (16000 / this.sampleRate));
+
+          if (targetSamples >= CHUNK_SAMPLES) {
             this.processChunk();
           }
         };
@@ -817,8 +929,9 @@
         if (this.isProcessing) return;
         this.isProcessing = true;
 
+        // Combine all buffered audio
         let combined = new Float32Array(0);
-        while (combined.length < this.chunkSize && this.buffer.length > 0) {
+        while (this.buffer.length > 0) {
           const chunk = this.buffer.shift();
           const newCombined = new Float32Array(combined.length + chunk.length);
           newCombined.set(combined);
@@ -827,12 +940,18 @@
         }
 
         if (combined.length > 0) {
-          const trimmed = combined.slice(0, this.chunkSize);
-          const rms = calculateRMS(trimmed);
+          // Resample to 16kHz for Whisper
+          const resampled = resampleAudio(combined, this.sampleRate, 16000);
 
-          // Only process if there's enough speech
-          if (rms > VAD_THRESHOLD) {
-            await transcribeAudio(trimmed);
+          // Take exactly 8 seconds worth
+          const chunk8s = resampled.slice(0, CHUNK_SAMPLES);
+
+          const rms = calculateRMS(chunk8s);
+          console.log('Processing chunk, RMS:', rms.toFixed(4), 'samples:', chunk8s.length);
+
+          // Process even if quiet - let Whisper decide
+          if (chunk8s.length >= 8000) {
+            await transcribeAudio(chunk8s);
           }
         }
 
@@ -849,13 +968,20 @@
 
     // ==================== TRANSCRIPTION ====================
     async function transcribeAudio(audioData) {
-      if (!whisperPipeline) return;
+      if (!whisperPipeline) {
+        console.warn('Whisper pipeline not ready');
+        return;
+      }
 
       try {
+        console.log('Transcribing audio, length:', audioData.length);
+
         const result = await whisperPipeline(audioData, {
-          chunk_length_s: CHUNK_DURATION,
+          chunk_length_s: 30, // Handle longer chunks
           return_timestamps: false
         });
+
+        console.log('Transcription result:', result);
 
         if (result && result.text && result.text.trim()) {
           const timestamp = Date.now();
@@ -1066,19 +1192,30 @@ Provide a detailed analysis of any issues found. Be concise.`;
 
       try {
         setStatus('loading', 'Capturing tab audio...');
+        console.log('Starting recording, capturing tab audio...');
         const tabStream = await captureTabAudio();
 
         const audioTracks = tabStream.getAudioTracks();
+        console.log('Tab audio tracks:', audioTracks.length);
         if (audioTracks.length === 0) {
           tabStream.getTracks().forEach(t => t.stop());
           throw new Error("No audio track. Please enable 'Share tab audio' in the dialog.");
         }
 
+        // Log track settings
+        const trackSettings = audioTracks[0].getSettings();
+        console.log('Tab track settings:', trackSettings);
+
         setStatus('loading', 'Capturing microphone...');
+        console.log('Capturing microphone...');
         const micStream = await captureMicrophone();
 
         setStatus('loading', 'Setting up audio...');
+        console.log('Merging streams...');
         const { ctx, stream: mergedStream } = mergeStreams(tabStream, micStream);
+
+        console.log('Audio context sample rate:', ctx.sampleRate);
+        console.log('Current sample rate for chunker:', currentSampleRate);
 
         // Clear previous data
         transcriptHistory = [];
@@ -1086,7 +1223,7 @@ Provide a detailed analysis of any issues found. Be concise.`;
         recordingStartTime = Date.now();
 
         // Start chunker
-        const chunker = new AudioChunker(ctx, mergedStream);
+        const chunker = new AudioChunker(ctx, mergedStream, currentSampleRate);
         chunker.start();
 
         // Visualizer
@@ -1112,6 +1249,7 @@ Provide a detailed analysis of any issues found. Be concise.`;
         stopBtn.disabled = false;
         setStatus('recording');
         updateBadge(transcriptBadge, 'LIVE', true);
+        toggleDebugPanel(true);
 
         window.currentStreams = { tabStream, micStream, ctx, chunker };
 
