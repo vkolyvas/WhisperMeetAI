@@ -544,7 +544,8 @@
     import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
 
     // WebLLM for LLM inference (much faster with WebGPU)
-    import * as webllm from 'https://esm.run/@mlc-ai/webllm@0.2.6';
+    // WebLLM from jsDelivr (recommended)
+    import * as webllm from 'https://cdn.jsdelivr.net/npm/@mlc-ai/webllm@0.2.46/+esm';
 
     // Configure Transformers.js to use IndexedDB cache
     env.allowLocalModels = true;
