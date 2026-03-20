@@ -1,45 +1,44 @@
 # WhisperMeet Web - Auto Start Script
 # Double-click this file to start the server and open the app
 
-$ErrorActionPreference = "Stop"
-
-# Get the directory where this script is located
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-# Find available port
-$Port = 8080
-while (Test-NetConnection -ComputerName localhost -Port $Port -WarningAction SilentlyContinue -ErrorAction SilentlyContinue) {
-    $Port++
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "  WhisperMeet Web - Starting..." -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+
+# Change to script directory
+Set-Location $ScriptDir
+
+# Kill any existing python server on common ports
+Get-NetTCPConnection -LocalPort 8080 -ErrorAction SilentlyContinue | ForEach-Object {
+    Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue
 }
 
-Write-Host "Starting WhisperMeet Web on port $Port..." -ForegroundColor Cyan
-Write-Host ""
+# Start Python HTTP server in background
+$Process = Start-Process -FilePath "python" -ArgumentList "-m", "http.server", "8080" -NoNewWindow -PassThru -WorkingDirectory $ScriptDir
 
-# Start HTTP server in background
-$Job = Start-Job -ScriptBlock {
-    param($dir, $port)
-    Set-Location $dir
-    python -m http.server $port
-} -ArgumentList $ScriptDir, $Port
-
-# Wait for server to start
 Start-Sleep -Seconds 2
 
+# Check if server started
+if ($Process.HasExited) {
+    Write-Host "Error: Failed to start server" -ForegroundColor Red
+    Read-Host "Press Enter to exit"
+    exit 1
+}
+
 # Open browser
-$Url = "http://localhost:$Port/index.html"
+$Url = "http://localhost:8080/index.html"
 Write-Host "Opening: $Url" -ForegroundColor Green
 Start-Process $Url
 
 Write-Host ""
 Write-Host "WhisperMeet is running!" -ForegroundColor Green
-Write-Host "Press Ctrl+C in this window to stop the server" -ForegroundColor Yellow
+Write-Host "Press Enter to stop the server" -ForegroundColor Yellow
 
-# Keep script running
-try {
-    while ($Job.State -eq "Running") {
-        Start-Sleep -Seconds 1
-    }
-} finally {
-    Stop-Job $Job -ErrorAction SilentlyContinue
-    Remove-Job $Job -ErrorAction SilentlyContinue
-}
+# Wait for user to press Enter
+Read-Host ""
+
+# Cleanup
+Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
+Write-Host "Server stopped." -ForegroundColor Cyan
