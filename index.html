@@ -394,6 +394,9 @@
   <div class="instructions">
     <h3>How to Use:</h3>
     <ol>
+      <li><strong>Important:</strong> Must be served via HTTP, not file://
+        <br><small>Run <code>python -m http.server 8080</code> then open <code>http://localhost:8080</code></small>
+      </li>
       <li>Wait for both models to load (status shows "Ready")</li>
       <li>Click "Start Recording" and select a browser tab with Teams/Zoom</li>
       <li><strong>Enable "Share tab audio"</strong> in the dialog</li>
@@ -774,6 +777,16 @@
     }
 
     async function initModels() {
+      // Check if running from file:// URL - this won't work for model loading
+      if (window.location.protocol === 'file:') {
+        loadingOverlay.classList.add('hidden');
+        showError('Cannot run from file:// URL. Please use a local web server:\n\n' +
+          '1. Run: python -m http.server 8080\n' +
+          '2. Open: http://localhost:8080/index.html\n\n' +
+          'Or use VS Code Live Server extension.');
+        return;
+      }
+
       setStatus('loading');
 
       try {
